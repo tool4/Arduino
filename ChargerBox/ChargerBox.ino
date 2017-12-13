@@ -3,9 +3,14 @@
 #include "LCD.h"
 #include "LiquidCrystal_I2C.h"
 #include <EEPROM.h>
+#include <Adafruit_INA219.h>
 
+Adafruit_INA219 ina219;
 bool light = true;
 int lastLight = 0;
+double current_mA = 0;
+bool charging = false;
+bool discharging = false;
 
 enum MODE_ENUM
 {
@@ -17,11 +22,12 @@ enum MODE_ENUM
     MODE_CHARGE,
     MODE_DISCHARGE,
     NUM_MODE_ENUMS,
-    MODE_SERIAL_MON,
+    MODE_SERIAL_MON, // hidden mode
 };
 
 char str_vcc[6];
 char str_volt[6];
+char str_mA[6];
 char serial_buf1[20];
 char serial_buf2[20];
 int serial_buf_line_no = 1;
@@ -35,7 +41,7 @@ int last_mode = mode;
 int photo_res = 0;
 double voltage = 0;
 LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
-
+//LiquidCrystal_I2C lcd(0x3f,16,2);
 
 unsigned long lastSeconds = 0;
 unsigned long lastMillis = 0;
@@ -102,6 +108,12 @@ void display( int _mode )
         sprintf(line1, "%02d:%02d:%02d                ", hours, minutes, seconds);
         sprintf(line2, "VCC: %sV", str_vcc );
         break;
+    case MODE_BUTTONS:
+        char str[16];
+        GetButtonsStr( str );
+        sprintf(line1, "CURRENT BUTTONS STATE:");
+        sprintf(line2, "%16s", str);
+        break;
     case MODE_TIME:
         sprintf(line1, "TIME FROM START:");
         sprintf(line2, "%02ld:%02ld:%02ld        ", hours, minutes, seconds);
@@ -110,26 +122,21 @@ void display( int _mode )
         sprintf(line1, "%16s", "INPUT VOLTAGE:");
         sprintf(line2, "%16s", str_volt);
         break;
-    case MODE_BUTTONS:
-        char str[16];
-        GetButtonsStr( str );
-        sprintf(line1, "CURRENT BUTTONS STATE:");
-        sprintf(line2, "%s", str);
-        break;
     case MODE_LCD_TIMER:
         sprintf(line1, "%02ld:%02ld:%02ld   %d    ", hours, minutes, seconds, lcd_timer);
         sprintf(line2, "LCD timeout %d       ", lcd_timeout);
         break;
-    case MODE_SERIAL_MON:
-        sprintf(line1, "%s", serial_buf2);
-        sprintf(line2, "%s", serial_buf1);
     case MODE_CHARGE:
-        sprintf(line1, "%s", "CHARGE");
-        sprintf(line2, "%s", str_volt);
+        sprintf(line1, "%16s", "CHARGE");
+        sprintf(line2, "%16s", str_volt);
         break;
     case MODE_DISCHARGE:
-        sprintf(line1, "%s", "DISCHARGE");
-        sprintf(line2, "%s", str_volt);
+        sprintf(line1, "%16s", discharging ? "DISCHARGING..." : "DISCHARGE");
+        sprintf(line2, "%6s %6s mA", str_volt, str_mA);
+        break;
+    case MODE_SERIAL_MON:
+        sprintf(line1, "%16s", serial_buf2);
+        sprintf(line2, "%16s", serial_buf1);
         break;
     default:
         sprintf(line2, "DFT mode %d %s", _mode, "      " );
@@ -189,15 +196,62 @@ void clear_screen()
     lcd.print(line2);
 }
 
+long readVcc()
+{
+    long result;
+    // Read 1.1V reference against AVcc
+    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+    delay(2);
+    // Wait for Vref to settle
+    ADCSRA |= _BV(ADSC);
+    while (bit_is_set(ADCSRA, ADSC));
+    // Convert
+    result = ADCL;
+    result |= ADCH << 8;
+    result = 1126400L / result; // Back-calculate AVcc in mV
+    result += 32; // to match my multimeter
+    return result;
+}
+
+void scan_I2C(void)
+{
+    Serial.println ("I2C scanner. Scanning ...");
+    byte count = 0;
+    Wire.begin();
+    for (byte i = 8; i < 120; i++)
+    {
+        Wire.beginTransmission (i);
+        if (Wire.endTransmission () == 0)
+        {
+            Serial.print ("Found address: ");
+            Serial.print (i, DEC);
+            Serial.print (" (0x");
+            Serial.print (i, HEX);
+            Serial.println (")");
+            count++;
+            delay (1);  // maybe unneeded?
+        } // end of good response
+    } // end of for loop
+    Serial.println ("Done.");
+    Serial.print ("Found ");
+    Serial.print (count, DEC);
+    Serial.println (" device(s).");
+}
+
 void setup()
 {
-    // put your setup code here, to run once:
-
     int value = EEPROM.read(eeprom_address);
     if ( value != 0)
     {
         lcd_timeout = value;
     }
+    value = EEPROM.read(eeprom_address+1);
+    if( value < NUM_MODE_ENUMS)
+    {
+        mode = value;
+    }
+    ina219.begin();
+    ina219.setCalibration_32V_1A();
 
     //Initialise the LCD
     lcd.begin (16, 2);
@@ -221,10 +275,12 @@ void setup()
 
     Serial.begin(9600);
     while (!Serial);
+    scan_I2C();
 
     Serial.println("I'm Alive (nano) with LCD");
     sprintf( serial_buf1, "                ");
     sprintf( serial_buf2, "                ");
+    clear_screen();
 }
 
 void loop()
@@ -244,6 +300,16 @@ void loop()
     elapsedMillis = getTime();
     double vcc = ((double) readVcc() / 1000.0);
     dtostrf(vcc, 5, 3, str_vcc);
+
+    if( charging || discharging )
+    {
+        current_mA = ina219.getCurrent_mA();
+    }
+    else
+    {
+        current_mA = 0;
+    }
+    dtostrf(current_mA, 5, 1, str_mA);
 
     voltage = (vcc * (double)analogRead( 0 )) / 1023.0;
     dtostrf(voltage, 3, 2, str_volt);
@@ -272,6 +338,7 @@ void loop()
     {
         mode++;
         mode %= NUM_MODE_ENUMS;
+        EEPROM.write(eeprom_address+1, mode);
         clear_screen();
     }
     if ( mode == MODE_DISCHARGE)
@@ -280,11 +347,21 @@ void loop()
             g_LastButtons.up_button == 0)
         {
             digitalWrite(3, HIGH);
+            discharging = false;
         }
         if ( g_Buttons.bottom_button != 0 &&
             g_LastButtons.bottom_button == 0)
         {
-            digitalWrite(3, LOW);
+            if( voltage >= 3.0 )
+            {
+                digitalWrite(3, LOW);
+                discharging = true;
+            }
+        }
+        if( voltage < 3.0 )
+        {
+            digitalWrite(3, HIGH);
+            discharging = false;
         }
     }
     else if ( mode == MODE_CHARGE)
@@ -293,11 +370,13 @@ void loop()
             g_LastButtons.up_button == 0)
         {
             digitalWrite(9, HIGH);
+            discharging = false;
         }
         if ( g_Buttons.bottom_button != 0 &&
             g_LastButtons.bottom_button == 0)
         {
             digitalWrite(9, LOW);
+            charging = true;
         }
     }
     else if ( mode == MODE_LCD_TIMER)
@@ -318,7 +397,9 @@ void loop()
     }
 
     if ( lcd_timer > lcd_timeout &&
-        lcd_timeout > 0 )
+        lcd_timeout > 0 &&
+        charging == false &&
+        discharging == false)
     {
         light = 0;
     }
@@ -330,22 +411,5 @@ void loop()
 
     lcd.setBacklight( light ? HIGH : LOW );
     last_mode = mode;
-}
-
-long readVcc()
-{
-    long result;
-    // Read 1.1V reference against AVcc
-    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
-    delay(2);
-    // Wait for Vref to settle
-    ADCSRA |= _BV(ADSC);
-    while (bit_is_set(ADCSRA, ADSC));
-    // Convert
-    result = ADCL;
-    result |= ADCH << 8;
-    result = 1126400L / result; // Back-calculate AVcc in mV
-    result += 32; // to match my multimeter
-    return result;
 }
 
