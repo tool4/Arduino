@@ -14,6 +14,8 @@ enum MODE_ENUM
     MODE_TIME,
     MODE_VOLTAGE,
     MODE_LCD_TIMER,
+    MODE_CHARGE,
+    MODE_DISCHARGE,
     NUM_MODE_ENUMS,
     MODE_SERIAL_MON,
 };
@@ -91,12 +93,13 @@ void display( int _mode )
 {
     char line1[24] = "                         ";
     char line2[24] = "                         ";
-    sprintf(line1, "%02d:%02d:%02dHHHHHHHHHHHHHHHHHHH", hours, minutes, seconds);
+    sprintf(line1, "%02d:%02d:%02d%10s", hours, minutes, seconds, "");
     sprintf(line2, "%16s", "");
 
     switch ( _mode )
     {
     case MODE_VCC:
+        sprintf(line1, "%02d:%02d:%02d                ", hours, minutes, seconds);
         sprintf(line2, "VCC: %sV", str_vcc );
         break;
     case MODE_TIME:
@@ -120,6 +123,13 @@ void display( int _mode )
     case MODE_SERIAL_MON:
         sprintf(line1, "%s", serial_buf2);
         sprintf(line2, "%s", serial_buf1);
+    case MODE_CHARGE:
+        sprintf(line1, "%s", "CHARGE");
+        sprintf(line2, "%s", str_volt);
+        break;
+    case MODE_DISCHARGE:
+        sprintf(line1, "%s", "DISCHARGE");
+        sprintf(line2, "%s", str_volt);
         break;
     default:
         sprintf(line2, "DFT mode %d %s", _mode, "      " );
@@ -204,6 +214,10 @@ void setup()
     pinMode(7, INPUT);
     pinMode(8, INPUT);
     delay(500);
+    pinMode(3, OUTPUT);
+    pinMode(9, OUTPUT);
+    digitalWrite(3, HIGH);
+    digitalWrite(9, HIGH);
 
     Serial.begin(9600);
     while (!Serial);
@@ -260,8 +274,33 @@ void loop()
         mode %= NUM_MODE_ENUMS;
         clear_screen();
     }
-
-    if ( mode == MODE_LCD_TIMER)
+    if ( mode == MODE_DISCHARGE)
+    {
+        if ( g_Buttons.up_button != 0 &&
+            g_LastButtons.up_button == 0)
+        {
+            digitalWrite(3, HIGH);
+        }
+        if ( g_Buttons.bottom_button != 0 &&
+            g_LastButtons.bottom_button == 0)
+        {
+            digitalWrite(3, LOW);
+        }
+    }
+    else if ( mode == MODE_CHARGE)
+    {
+        if ( g_Buttons.up_button != 0 &&
+            g_LastButtons.up_button == 0)
+        {
+            digitalWrite(9, HIGH);
+        }
+        if ( g_Buttons.bottom_button != 0 &&
+            g_LastButtons.bottom_button == 0)
+        {
+            digitalWrite(9, LOW);
+        }
+    }
+    else if ( mode == MODE_LCD_TIMER)
     {
         // Serial.write("mode timer");
         if ( g_Buttons.up_button != 0 &&
