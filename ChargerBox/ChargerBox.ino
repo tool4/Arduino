@@ -1,4 +1,3 @@
-#include <SPI.h>
 #include "Wire.h"
 #include "LCD.h"
 #include "LiquidCrystal_I2C.h"
@@ -11,6 +10,7 @@ int lastLight = 0;
 double current_mA = 0;
 bool charging = false;
 bool discharging = false;
+bool discharged = false;
 
 enum MODE_ENUM
 {
@@ -28,6 +28,7 @@ enum MODE_ENUM
 char str_vcc[6];
 char str_volt[6];
 char str_mA[6];
+char str_mAh[8];
 char serial_buf1[20];
 char serial_buf2[20];
 int serial_buf_line_no = 1;
@@ -52,6 +53,10 @@ unsigned long minutes = 0;
 unsigned long hours = 0;
 unsigned long lcd_timer = 0;
 unsigned long lcd_timeout = 20;
+unsigned long dischargeStart = 0;
+unsigned long dischargeElapsed = 0;
+unsigned long lastMeassureTime = 0;
+unsigned int mAh = 0;
 
 unsigned long getTime()
 {
@@ -131,8 +136,20 @@ void display( int _mode )
         sprintf(line2, "%16s", str_volt);
         break;
     case MODE_DISCHARGE:
-        sprintf(line1, "%16s", discharging ? "DISCHARGING..." : "DISCHARGE");
-        sprintf(line2, "%6s %6s mA", str_volt, str_mA);
+        {
+            if(discharging || discharged)
+            {
+                sprintf(line1, "D:  %8s mAh", str_mAh);
+            }
+            else
+            {
+                sprintf(line1, "%16s", "DISCHARGE");
+            }
+        }
+        if( discharged )
+            sprintf(line2, "%6s  FINISHED", str_volt);
+        else
+            sprintf(line2, "%6s %6s mA", str_volt, str_mA);
         break;
     case MODE_SERIAL_MON:
         sprintf(line1, "%16s", serial_buf2);
@@ -304,6 +321,17 @@ void loop()
     if( charging || discharging )
     {
         current_mA = ina219.getCurrent_mA();
+        if( discharging )
+        {
+            unsigned long currentTime = millis();
+            long elapsedTime = currentTime - lastMeassureTime;
+            if(elapsedTime < 0)
+            {
+                //TODO: handle overflow!
+            }
+            mAh += (current_mA * ((double)elapsedTime/1000.0)) / (60 * 60);
+            dtostrf(mAh, 8, 0, str_mAh);
+        }
     }
     else
     {
@@ -356,10 +384,15 @@ void loop()
             {
                 digitalWrite(3, LOW);
                 discharging = true;
+                dischargeStart = millis();
             }
         }
         if( voltage < 3.0 )
         {
+            if( discharging )
+            {
+                discharged = true;
+            }
             digitalWrite(3, HIGH);
             discharging = false;
         }
