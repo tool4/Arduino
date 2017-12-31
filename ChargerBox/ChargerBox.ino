@@ -4,13 +4,16 @@
 #include <EEPROM.h>
 #include <Adafruit_INA219.h>
 
+#define VERBOSE 1
+
 Adafruit_INA219 ina219;
 bool light = true;
 int lastLight = 0;
 double current_mA = 0;
-bool charging = false;
-bool discharging = false;
-bool discharged = false;
+bool g_charging = false;
+bool g_charged = false;
+bool g_discharging = false;
+bool g_discharged = false;
 
 enum MODE_ENUM
 {
@@ -31,6 +34,7 @@ char str_mA[6];
 char str_mAh[8];
 char serial_buf1[20];
 char serial_buf2[20];
+char buffer[120];
 int serial_buf_line_no = 1;
 
 int eeprom_address = 0;
@@ -44,50 +48,54 @@ double voltage = 0;
 LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 //LiquidCrystal_I2C lcd(0x3f,16,2);
 
-unsigned long lastSeconds = 0;
-unsigned long lastMillis = 0;
-unsigned long elapsedMillis = 0;
-unsigned long totalSeconds = 0;
-unsigned long seconds = 0;
-unsigned long minutes = 0;
-unsigned long hours = 0;
-unsigned long lcd_timer = 0;
-unsigned long lcd_timeout = 20;
-unsigned long dischargeStart = 0;
-unsigned long dischargeElapsed = 0;
-unsigned long lastMeassureTime = 0;
-unsigned int mAh = 0;
+unsigned long g_lastSeconds = 0;
+unsigned long g_lastMillis = 0;
+unsigned long g_elapsedMillis = 0;
+unsigned long g_elapsedSeconds = 0;
+unsigned long g_totalSeconds = 0;
+unsigned long g_seconds = 0;
+unsigned long g_minutes = 0;
+unsigned long g_hours = 0;
+unsigned long g_lcd_timer = 0;
+unsigned long g_lcd_timeout = 20;
+unsigned long g_dischargeStart = 0;
+unsigned long g_dischargeElapsed = 0;
+unsigned long g_lastMeassureTime = 0;
+double g_mAh = 0;
+bool g_tick = false;
 
 unsigned long getTime()
 {
     unsigned long Millis = millis();
-    if ( Millis < lastMillis ) // overflow!
+    if ( Millis < g_lastMillis ) // overflow!
     {
-        lastMillis = 0;
+        g_lastMillis = 0;
     }
     unsigned long currentSeconds = ( Millis / 1000 );
-    unsigned long elapsedSeconds = ( currentSeconds - lastSeconds );
 
-    elapsedMillis = Millis - lastMillis;
-    lastMillis = Millis;
-    if ( elapsedSeconds > 0 )
+    g_elapsedSeconds = ( currentSeconds - g_lastSeconds );
+
+    g_elapsedMillis = Millis - g_lastMillis;
+    g_lastMillis = Millis;
+    if ( g_elapsedSeconds > 0 )
     {
-        seconds += elapsedSeconds;
-        totalSeconds += elapsedSeconds;
-        lastSeconds = currentSeconds;
-        lcd_timer += elapsedSeconds;
+        g_seconds += g_elapsedSeconds;
+        g_totalSeconds += g_elapsedSeconds;
+        g_lastSeconds = currentSeconds;
+        g_lcd_timer += g_elapsedSeconds;
+        g_tick = true;
     }
-    if ( seconds >= 60 )
+    if ( g_seconds >= 60 )
     {
-        ++minutes;
-        seconds = 0;
+        ++g_minutes;
+        g_seconds = 0;
     }
-    if ( minutes >= 60 )
+    if ( g_minutes >= 60 )
     {
-        ++hours;
-        minutes = 0;
+        ++g_hours;
+        g_minutes = 0;
     }
-    return elapsedMillis;
+    return g_elapsedMillis;
 }
 
 void GetButtonsStr( char* str )
@@ -104,13 +112,13 @@ void display( int _mode )
 {
     char line1[24] = "                         ";
     char line2[24] = "                         ";
-    sprintf(line1, "%02d:%02d:%02d%10s", hours, minutes, seconds, "");
+    sprintf(line1, "%02d:%02d:%02d%10s", g_hours, g_minutes, g_seconds, "");
     sprintf(line2, "%16s", "");
 
     switch ( _mode )
     {
     case MODE_VCC:
-        sprintf(line1, "%02d:%02d:%02d                ", hours, minutes, seconds);
+        sprintf(line1, "%02d:%02d:%02d                ", g_hours, g_minutes, g_seconds);
         sprintf(line2, "VCC: %sV", str_vcc );
         break;
     case MODE_BUTTONS:
@@ -121,23 +129,35 @@ void display( int _mode )
         break;
     case MODE_TIME:
         sprintf(line1, "TIME FROM START:");
-        sprintf(line2, "%02ld:%02ld:%02ld        ", hours, minutes, seconds);
+        sprintf(line2, "%02ld:%02ld:%02ld        ", g_hours, g_minutes, g_seconds);
         break;
     case MODE_VOLTAGE:
         sprintf(line1, "%16s", "INPUT VOLTAGE:");
         sprintf(line2, "%16s", str_volt);
         break;
     case MODE_LCD_TIMER:
-        sprintf(line1, "%02ld:%02ld:%02ld   %d    ", hours, minutes, seconds, lcd_timer);
-        sprintf(line2, "LCD timeout %d       ", lcd_timeout);
+        sprintf(line1, "%02ld:%02ld:%02ld   %d    ", g_hours, g_minutes, g_seconds, g_lcd_timer);
+        sprintf(line2, "LCD timeout %d       ", g_lcd_timeout);
         break;
     case MODE_CHARGE:
-        sprintf(line1, "%16s", "CHARGE");
-        sprintf(line2, "%16s", str_volt);
+        {
+            if(g_charging || g_charged)
+            {
+                sprintf(line1, "C:  %8s mAh", str_mAh);
+            }
+            else
+            {
+                sprintf(line1, "%16s", "CHARGE");
+            }
+        }
+        if( g_charged )
+            sprintf(line2, "%6s  FINISHED", str_volt);
+        else
+            sprintf(line2, "%6s %6s mA", str_volt, str_mA);
         break;
     case MODE_DISCHARGE:
         {
-            if(discharging || discharged)
+            if( g_discharging || g_discharged )
             {
                 sprintf(line1, "D:  %8s mAh", str_mAh);
             }
@@ -146,7 +166,7 @@ void display( int _mode )
                 sprintf(line1, "%16s", "DISCHARGE");
             }
         }
-        if( discharged )
+        if( g_discharged )
             sprintf(line2, "%6s  FINISHED", str_volt);
         else
             sprintf(line2, "%6s %6s mA", str_volt, str_mA);
@@ -260,7 +280,7 @@ void setup()
     int value = EEPROM.read(eeprom_address);
     if ( value != 0)
     {
-        lcd_timeout = value;
+        g_lcd_timeout = value;
     }
     value = EEPROM.read(eeprom_address+1);
     if( value < NUM_MODE_ENUMS)
@@ -302,6 +322,8 @@ void setup()
 
 void loop()
 {
+    getTime();
+
     if ( mode != MODE_SERIAL_MON)
     {
         mode %= NUM_MODE_ENUMS;
@@ -310,27 +332,52 @@ void loop()
 
     if ( ButtonsChanged() )
     {
-        lcd_timer = 0;
+        g_lcd_timer = 0;
         light = true;
     }
     int mode_button = digitalRead(2);
-    elapsedMillis = getTime();
     double vcc = ((double) readVcc() / 1000.0);
     dtostrf(vcc, 5, 3, str_vcc);
 
-    if( charging || discharging )
+    if( g_charging || g_discharging )
     {
-        current_mA = ina219.getCurrent_mA();
-        if( discharging )
+        unsigned long currentTime = millis();
+
+        // negated as my wires are aparently reversed
+        current_mA = -ina219.getCurrent_mA();
+
+        if(g_lastMeassureTime == 0)
         {
-            unsigned long currentTime = millis();
-            long elapsedTime = currentTime - lastMeassureTime;
+            g_lastMeassureTime = currentTime;
+        }
+
+        //if( discharging )
+        {
+            unsigned long elapsedTime = currentTime - g_lastMeassureTime;
             if(elapsedTime < 0)
             {
                 //TODO: handle overflow!
+                sprintf(str_mAh, "%s", "OVERFLOW!!!");
+                elapsedTime = 0;
             }
-            mAh += (current_mA * ((double)elapsedTime/1000.0)) / (60 * 60);
-            dtostrf(mAh, 8, 0, str_mAh);
+            else if(g_tick == true)
+            {
+#ifdef VERBOSE
+                //sprintf(buffer, "curTime: %lu, elapsed: %lu, last: %lu\n",
+                    //currentTime, elapsedTime, g_lastMeassureTime);
+                //Serial.write(buffer);
+                sprintf(buffer, "%s mAh + %s mA * %lu ms",
+                    str_mAh, str_mA, elapsedTime);
+                Serial.write(buffer);
+#endif
+                g_mAh += (current_mA * ((double)elapsedTime/1000.0)) / (60 * 60);
+                dtostrf(g_mAh, 6, 1, str_mAh);
+                g_lastMeassureTime = currentTime;
+#ifdef VERBOSE
+                sprintf(buffer, " = %s mAh\n", str_mAh);
+                Serial.write(buffer);
+#endif
+            }
         }
     }
     else
@@ -356,7 +403,7 @@ void loop()
             Serial.write(c);
         };
         light = 1;
-        lcd_timer = 0;
+        g_lcd_timer = 0;
         mode = MODE_SERIAL_MON;
     }
     delay(100);
@@ -372,67 +419,69 @@ void loop()
     if ( mode == MODE_DISCHARGE)
     {
         if ( g_Buttons.up_button != 0 &&
-            g_LastButtons.up_button == 0)
+             g_LastButtons.up_button == 0)
         {
             digitalWrite(3, HIGH);
-            discharging = false;
+            g_discharging = false;
         }
         if ( g_Buttons.bottom_button != 0 &&
-            g_LastButtons.bottom_button == 0)
+             g_LastButtons.bottom_button == 0)
         {
             if( voltage >= 3.0 )
             {
                 digitalWrite(3, LOW);
-                discharging = true;
-                dischargeStart = millis();
+                g_discharging = true;
+                g_mAh = 0;
+                g_dischargeStart = millis();
             }
         }
         if( voltage < 3.0 )
         {
-            if( discharging )
+            if( g_discharging )
             {
-                discharged = true;
+                g_discharged = true;
             }
             digitalWrite(3, HIGH);
-            discharging = false;
+            g_discharging = false;
         }
     }
     else if ( mode == MODE_CHARGE)
     {
         if ( g_Buttons.up_button != 0 &&
-            g_LastButtons.up_button == 0)
+             g_LastButtons.up_button == 0)
         {
             digitalWrite(9, HIGH);
-            discharging = false;
+            g_charging = false;
         }
         if ( g_Buttons.bottom_button != 0 &&
             g_LastButtons.bottom_button == 0)
         {
             digitalWrite(9, LOW);
-            charging = true;
+            g_charging = true;
+            g_mAh = 0;
         }
     }
     else if ( mode == MODE_LCD_TIMER)
     {
         // Serial.write("mode timer");
         if ( g_Buttons.up_button != 0 &&
-            g_LastButtons.up_button == 0)
+             g_LastButtons.up_button == 0)
         {
-            lcd_timer = 0;
-            if ( lcd_timeout == 0 )
-                lcd_timeout++;
-            lcd_timeout *= 2;
-            if ( lcd_timeout > 255 )
-                lcd_timeout = 0;
+            g_lcd_timer = 0;
+            if ( g_lcd_timeout == 0 )
+                g_lcd_timeout++;
+            g_lcd_timeout *= 2;
+            if ( g_lcd_timeout > 255 )
+                g_lcd_timeout = 0;
             light = 1;
-            EEPROM.write(eeprom_address, lcd_timeout);
+            EEPROM.write(eeprom_address, g_lcd_timeout);
         }
     }
 
-    if ( lcd_timer > lcd_timeout &&
-        lcd_timeout > 0 &&
-        charging == false &&
-        discharging == false)
+    if ( g_lcd_timer > g_lcd_timeout &&
+         g_lcd_timeout > 0 &&
+         g_charging == false &&
+         g_discharging == false)
     {
         light = 0;
     }
@@ -444,5 +493,6 @@ void loop()
 
     lcd.setBacklight( light ? HIGH : LOW );
     last_mode = mode;
+    g_tick = false;
 }
 
