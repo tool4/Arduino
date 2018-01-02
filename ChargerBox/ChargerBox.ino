@@ -9,9 +9,9 @@
 #define VERBOSE 1
 
 Charger charger;
-
-extern SButtons g_Buttons;
-extern SButtons g_LastButtons;
+CButtons buttons;
+//extern SButtons g_Buttons;
+//extern SButtons g_LastButtons;
 
 Adafruit_INA219 ina219;
 bool light = true;
@@ -52,6 +52,7 @@ int mode = MODE_VOLTAGE;
 int last_mode = mode;
 int photo_res = 0;
 double voltage = 0;
+int g_diode = 0;
 LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 //LiquidCrystal_I2C lcd(0x3f,16,2);
 
@@ -160,7 +161,7 @@ void setup()
         mode = value;
     }
     ina219.begin();
-    ina219.setCalibration_32V_1A();
+    //ina219.setCalibration_32V_1A();
 
     //Initialise the LCD
     lcd.begin (16, 2);
@@ -200,9 +201,9 @@ void loop()
     {
         mode %= NUM_MODE_ENUMS;
     }
-    ReadButtons();
+    buttons.ReadButtons();
 
-    if ( ButtonsChanged() )
+    if ( buttons.ButtonsChanged() )
     {
         g_lcd_timer = 0;
         light = true;
@@ -211,12 +212,12 @@ void loop()
     double vcc = ((double) readVcc() / 1000.0);
     dtostrf(vcc, 5, 3, str_vcc);
 
+    g_diode = analogRead( 1 );
+
     if( g_charging || g_discharging )
     {
         unsigned long currentTime = millis();
-
-        // negated as my wires are aparently reversed
-        current_mA = -ina219.getCurrent_mA();
+        current_mA = fabs(ina219.getCurrent_mA());
 
         if(g_lastMeassureTime == 0)
         {
@@ -238,7 +239,7 @@ void loop()
                 //sprintf(buffer, "curTime: %lu, elapsed: %lu, last: %lu\n",
                     //currentTime, elapsedTime, g_lastMeassureTime);
                 //Serial.write(buffer);
-                sprintf(buffer, "%s mAh + %s mA * %lu ms",
+                sprintf(buffer, "%s mAh + %s mA * %4lu ms",
                     str_mAh, str_mA, elapsedTime);
                 Serial.write(buffer);
 #endif
@@ -279,7 +280,7 @@ void loop()
         mode = MODE_SERIAL_MON;
     }
     delay(100);
-    charger.display(mode);
+    charger.display(mode, buttons);
 
     if ( last_mode_button == 0 && mode_button == 1)
     {
@@ -290,14 +291,12 @@ void loop()
     }
     if ( mode == MODE_DISCHARGE)
     {
-        if ( g_Buttons.up_button != 0 &&
-             g_LastButtons.up_button == 0)
+        if ( buttons.Up() )
         {
             digitalWrite(3, HIGH);
             g_discharging = false;
         }
-        if ( g_Buttons.bottom_button != 0 &&
-             g_LastButtons.bottom_button == 0)
+        if ( buttons.Down() )
         {
             if( voltage >= 3.0 )
             {
@@ -319,25 +318,29 @@ void loop()
     }
     else if ( mode == MODE_CHARGE)
     {
-        if ( g_Buttons.up_button != 0 &&
-             g_LastButtons.up_button == 0)
+        if ( buttons.Up() )
         {
             digitalWrite(9, HIGH);
             g_charging = false;
         }
-        if ( g_Buttons.bottom_button != 0 &&
-            g_LastButtons.bottom_button == 0)
+        if ( buttons.Down() )
         {
             digitalWrite(9, LOW);
             g_charging = true;
             g_mAh = 0;
         }
+
+        //if( g_charging && g_diode < 800)
+        //{
+            //g_charged = true;
+            //g_charging = false;
+            //digitalWrite(9, HIGH);
+        //}
     }
     else if ( mode == MODE_LCD_TIMER)
     {
         // Serial.write("mode timer");
-        if ( g_Buttons.up_button != 0 &&
-             g_LastButtons.up_button == 0)
+        if ( buttons.Up() )
         {
             g_lcd_timer = 0;
             if ( g_lcd_timeout == 0 )
@@ -361,7 +364,6 @@ void loop()
     last_mode_button = mode_button;
     lastLight = light;
     lastMode = (MODE_ENUM)mode;
-    g_LastButtons = g_Buttons;
 
     lcd.setBacklight( light ? HIGH : LOW );
     last_mode = mode;

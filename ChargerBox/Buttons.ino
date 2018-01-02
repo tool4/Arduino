@@ -1,8 +1,6 @@
+#include "buttons.h"
 
-SButtons g_Buttons;
-SButtons g_LastButtons;
-
-void GetButtonsStr( char* str )
+void CButtons::GetButtonsStr( char* str )
 {
     int btn1 = digitalRead(4);
     int btn2 = digitalRead(5);
@@ -12,26 +10,59 @@ void GetButtonsStr( char* str )
     sprintf(str, "%d %d %d %d %d", btn1, btn2, btn3, btn4, btn5 );
 }
 
-void ReadButtons()
+void CButtons::ReadButtons()
 {
-    g_Buttons.mode_button = digitalRead(2);
-    g_Buttons.left_button = digitalRead(4);
-    g_Buttons.up_button = digitalRead(5);
-    g_Buttons.right_button = digitalRead(6);
-    g_Buttons.bottom_button = digitalRead(7);
-    g_Buttons.enter_button = digitalRead(8);
+    m_lastState = m_currentState;
+
+    m_currentState.mode_button = digitalRead(2);
+    m_currentState.left_button = digitalRead(4);
+    m_currentState.up_button = digitalRead(5);
+    m_currentState.right_button = digitalRead(6);
+    m_currentState.bottom_button = digitalRead(7);
+    m_currentState.enter_button = digitalRead(8);
 }
 
-bool ButtonsChanged()
+bool CButtons::ButtonsChanged()
 {
-    if ( g_Buttons.mode_button != g_LastButtons.mode_button ||
-        g_Buttons.left_button != g_LastButtons.left_button ||
-        g_Buttons.up_button != g_LastButtons.up_button ||
-        g_Buttons.right_button != g_LastButtons.right_button ||
-        g_Buttons.bottom_button != g_LastButtons.bottom_button ||
-        g_Buttons.enter_button != g_LastButtons.enter_button )
+    if ( m_currentState.mode_button != m_lastState.mode_button ||
+        m_currentState.left_button != m_lastState.left_button ||
+        m_currentState.up_button != m_lastState.up_button ||
+        m_currentState.right_button != m_lastState.right_button ||
+        m_currentState.bottom_button != m_lastState.bottom_button ||
+        m_currentState.enter_button != m_lastState.enter_button )
     {
         return true;
     }
     return false;
 }
+
+bool CButtons::Up()
+{
+    return ( m_currentState.up_button && m_lastState.up_button );
+}
+
+bool CButtons::Down()
+{
+    return( m_currentState.bottom_button && m_lastState.bottom_button );
+}
+
+bool CButtons::Left()
+{
+    return( m_currentState.left_button && m_lastState.left_button );
+}
+
+bool CButtons::Right()
+{
+    return( m_currentState.right_button && m_lastState.right_button );
+}
+
+bool CButtons::Enter()
+{
+    return( m_currentState.enter_button && m_lastState.enter_button );
+}
+
+bool CButtons::Esc()
+{
+    return( m_currentState.mode_button && m_lastState.mode_button );
+}
+

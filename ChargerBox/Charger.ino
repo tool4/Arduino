@@ -1,3 +1,5 @@
+#include "buttons.h"
+#include "charger.h"
 
 void Charger::clear_screen()
 {
@@ -11,14 +13,14 @@ void Charger::clear_screen()
 }
 
 
-void Charger::display( int _mode )
+void Charger::display( const int mode, CButtons& buttons )
 {
     char line1[24] = "                       ";
     char line2[24] = "                       ";
     sprintf(line1, "%02d:%02d:%02d%10s", g_hours, g_minutes, g_seconds, "");
     sprintf(line2, "%16s", "");
 
-    switch ( _mode )
+    switch ( mode )
     {
     case MODE_VCC:
         sprintf(line1, "%02d:%02d:%02d                ", g_hours, g_minutes, g_seconds);
@@ -26,7 +28,7 @@ void Charger::display( int _mode )
         break;
     case MODE_BUTTONS:
         char str[16];
-        GetButtonsStr( str );
+        buttons.GetButtonsStr( str );
         sprintf(line1, "CURRENT BUTTONS STATE:");
         sprintf(line2, "%16s", str);
         break;
@@ -46,7 +48,7 @@ void Charger::display( int _mode )
         {
             if(g_charging || g_charged)
             {
-                sprintf(line1, "C:  %8s mAh", str_mAh);
+                sprintf(line1, "C: %d %s mAh", g_diode/10, str_mAh);
             }
             else
             {
@@ -79,7 +81,7 @@ void Charger::display( int _mode )
         sprintf(line2, "%16s", serial_buf1);
         break;
     default:
-        sprintf(line2, "DFT mode %d %s", _mode, "      " );
+        sprintf(line2, "DFT mode %d %s", mode, "      " );
         break;
     }
     lcd.setCursor(0, 0);
