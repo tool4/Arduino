@@ -12,8 +12,7 @@ void Charger::clear_screen()
     lcd.print(line2);
 }
 
-
-void Charger::display( const int mode, CButtons& buttons )
+void Charger::main_menu( const int mode, CButtons& buttons )
 {
     char line1[24] = "                       ";
     char line2[24] = "                       ";

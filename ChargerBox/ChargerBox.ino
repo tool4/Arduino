@@ -10,34 +10,19 @@
 
 Charger charger;
 CButtons buttons;
-//extern SButtons g_Buttons;
-//extern SButtons g_LastButtons;
 
 Adafruit_INA219 ina219;
 bool light = true;
 int lastLight = 0;
-double current_mA = 0;
+int  current_mA = 0;
 bool g_charging = false;
 bool g_charged = false;
 bool g_discharging = false;
 bool g_discharged = false;
 
-enum MODE_ENUM
-{
-    MODE_VCC = 0,
-    MODE_BUTTONS,
-    MODE_TIME,
-    MODE_VOLTAGE,
-    MODE_LCD_TIMER,
-    MODE_CHARGE,
-    MODE_DISCHARGE,
-    NUM_MODE_ENUMS,
-    MODE_SERIAL_MON, // hidden mode
-};
-
 char str_vcc[6];
 char str_volt[6];
-char str_mA[6];
+char str_mA[5];
 char str_mAh[8];
 char serial_buf1[20];
 char serial_buf2[20];
@@ -69,6 +54,7 @@ unsigned long g_lcd_timeout = 20;
 unsigned long g_dischargeStart = 0;
 unsigned long g_dischargeElapsed = 0;
 unsigned long g_lastMeassureTime = 0;
+int g_chargingTime = 0;
 double g_mAh = 0;
 bool g_tick = false;
 
@@ -147,9 +133,26 @@ void scan_I2C(void)
     Serial.print (count, DEC);
     Serial.println (" device(s).");
 }
+// --------------------------------------------------------------------------------
+// Restarts program from beginning but does not reset the peripherals and registers
+// --------------------------------------------------------------------------------
+void software_Reset()
+{
+    asm volatile ("  jmp 0");
+}
 
 void setup()
 {
+    //Initialise the LCD
+    lcd.begin (16, 2);
+    lcd.setBacklight(HIGH);
+    lcd.print("LCD POWER MONITOR");
+    lcd.setCursor(0, 1);
+    lcd.print("LI-IO CHARGE/DISCHARGE");
+
+    beep();
+    //play_melody();
+
     int value = EEPROM.read(eeprom_address);
     if ( value != 0)
     {
@@ -163,12 +166,6 @@ void setup()
     ina219.begin();
     //ina219.setCalibration_32V_1A();
 
-    //Initialise the LCD
-    lcd.begin (16, 2);
-    lcd.setBacklight(HIGH);
-    lcd.print("LCD POWER MONITOR");
-    lcd.setCursor(0, 1);
-    lcd.print("LI-IO CHARGE/DISCHARGE");
     pinMode(13, INPUT);
     pinMode(12, OUTPUT);
     pinMode(2, INPUT);
@@ -217,7 +214,10 @@ void loop()
     if( g_charging || g_discharging )
     {
         unsigned long currentTime = millis();
-        current_mA = fabs(ina219.getCurrent_mA());
+        if( g_tick)
+        {
+            current_mA = fabs(ina219.getCurrent_mA());
+        }
 
         if(g_lastMeassureTime == 0)
         {
@@ -246,6 +246,7 @@ void loop()
                 g_mAh += (current_mA * ((double)elapsedTime/1000.0)) / (60 * 60);
                 dtostrf(g_mAh, 6, 1, str_mAh);
                 g_lastMeassureTime = currentTime;
+                g_chargingTime += (elapsedTime/1000); // in seconds
 #ifdef VERBOSE
                 sprintf(buffer, " = %s mAh\n", str_mAh);
                 Serial.write(buffer);
@@ -257,7 +258,7 @@ void loop()
     {
         current_mA = 0;
     }
-    dtostrf(current_mA, 5, 1, str_mA);
+    dtostrf(current_mA, 4, 0, str_mA);
 
     voltage = (vcc * (double)analogRead( 0 )) / 1023.0;
     dtostrf(voltage, 3, 2, str_volt);
@@ -280,7 +281,7 @@ void loop()
         mode = MODE_SERIAL_MON;
     }
     delay(100);
-    charger.display(mode, buttons);
+    charger.main_menu(mode, buttons);
 
     if ( last_mode_button == 0 && mode_button == 1)
     {
@@ -328,14 +329,15 @@ void loop()
             digitalWrite(9, LOW);
             g_charging = true;
             g_mAh = 0;
+            g_chargingTime = 0;
         }
 
-        //if( g_charging && g_diode < 800)
-        //{
-            //g_charged = true;
-            //g_charging = false;
-            //digitalWrite(9, HIGH);
-        //}
+        if( g_charging && g_diode < 800 && g_chargingTime > 30 )
+        {
+            g_charged = true;
+            g_charging = false;
+            digitalWrite(9, HIGH);
+        }
     }
     else if ( mode == MODE_LCD_TIMER)
     {
@@ -359,6 +361,11 @@ void loop()
          g_discharging == false)
     {
         light = 0;
+    }
+
+    if( buttons.Enter() && buttons.Esc() )
+    {
+        software_Reset();
     }
 
     last_mode_button = mode_button;
