@@ -38,31 +38,31 @@ bool CButtons::ButtonsChanged()
 
 bool CButtons::Up()
 {
-    return ( m_currentState.up_button && m_lastState.up_button );
+    return ( m_currentState.up_button && !m_lastState.up_button );
 }
 
 bool CButtons::Down()
 {
-    return( m_currentState.bottom_button && m_lastState.bottom_button );
+    return( m_currentState.bottom_button && !m_lastState.bottom_button );
 }
 
 bool CButtons::Left()
 {
-    return( m_currentState.left_button && m_lastState.left_button );
+    return( m_currentState.left_button && !m_lastState.left_button);
 }
 
 bool CButtons::Right()
 {
-    return( m_currentState.right_button && m_lastState.right_button );
+    return( m_currentState.right_button && !m_lastState.right_button );
 }
 
 bool CButtons::Enter()
 {
-    return( m_currentState.enter_button && m_lastState.enter_button );
+    return( m_currentState.enter_button && !m_lastState.enter_button );
 }
 
 bool CButtons::Esc()
 {
-    return( m_currentState.mode_button && m_lastState.mode_button );
+    return( m_currentState.mode_button && !m_lastState.mode_button );
 }
 
