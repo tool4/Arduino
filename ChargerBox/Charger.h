@@ -18,6 +18,7 @@ char serial_buf1[20];
 char serial_buf2[20];
 char buffer[120];
 int serial_buf_line_no = 1;
+char g_str_time[10];
 
 /* TODO Clean this up! END*/
 
@@ -45,6 +46,15 @@ enum CHARGER_ENUM
     NUM_CHARGER_ENUMS,
 };
 
+// should be in sync with CHARGER_ENUM
+enum WORKING_MODE
+{
+    CHARGING = 0,
+    DISCHARGING,
+    CDC,
+    NONE,
+};
+
 enum SETUP_ENUM
 {
     MODE_VCC = 0,
@@ -69,7 +79,7 @@ public:
         m_cdc_mode = 0;
         m_chargerStart = 0;
         m_lastMeassureTime = 0;
-        m_chargerTime = 0;
+        m_workingTime = 0;
 
         sprintf( m_line1, "                       ");
         sprintf( m_line1, "                       ");
@@ -95,17 +105,18 @@ private:
     MODE_ENUM m_menu;
     SETUP_ENUM m_setup_mode;
     CHARGER_ENUM m_charger_mode;
+    WORKING_MODE m_mode = NONE;
     CButtons m_buttons;
     int m_cdc_mode;
     char m_line1[24];
     char m_line2[24];
-    bool m_tickTock = false;
+    bool m_tick = false;
+    int m_tickCounter = 0;
 
     unsigned long m_chargerStart = 0;
     unsigned long m_lastMeassureTime = 0;
-    unsigned long m_chargerTime = 0;
+    unsigned long m_workingTime = 0;
     bool m_finished = 0;
-    bool m_charging = false;
-    bool m_discharging = false;
+    bool m_working = false;
 };
 

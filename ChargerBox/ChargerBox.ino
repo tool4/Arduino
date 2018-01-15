@@ -10,7 +10,7 @@
 
 Charger charger;
 
-
+bool playTone = false;
 int eeprom_address = 0;
 int last_mode_button = 0;
 //int mode = MODE_VOLTAGE;
@@ -129,8 +129,11 @@ void setup()
     lcd.setCursor(0, 1);
     lcd.print("LI-IO CHARGE/DISCHARGE");
 
-    beep();
-    //play_melody();
+    if( playTone )
+    {
+        beep();
+        //play_melody();
+    }
 
     int value = EEPROM.read(eeprom_address);
     if ( value != 0)

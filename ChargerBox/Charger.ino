@@ -1,6 +1,14 @@
 #include "buttons.h"
 #include "charger.h"
 
+void get_time_string(unsigned long seconds, char *str)
+{
+    int hours = seconds / 360;
+    int minutes = (seconds - (hours * 360)) / 60;
+
+    sprintf(str, "%2d:%2d:%2d", hours, minutes, seconds % 60);
+}
+
 void Charger::clear_screen()
 {
     //clear lcd:
@@ -14,7 +22,6 @@ void Charger::clear_screen()
 
 void Charger::main_menu()
 {
-    //Serial.println("main_menu");
     if( m_menu_level == TOP_MENU && m_buttons.Enter())
     {
         m_menu_level = FIRST_LEVEL_MENU;
@@ -65,8 +72,6 @@ void Charger::main_menu()
     lcd.print(m_line1);
     lcd.setCursor(0, 1);
     lcd.print(m_line2);
-    //Serial.println("Wait...");
-    //delay(200);
 }
 
 void Charger::charger_menu()
@@ -90,116 +95,108 @@ void Charger::charger_menu()
     {
         mode = NUM_CHARGER_ENUMS - 1;
     }
+    if(m_tick)
+    {
+        m_tickCounter++;
+        m_tickCounter%=4;
+    }
 
     m_charger_mode = (CHARGER_ENUM)mode;
+    char charge_mode_str1[2];
+    char charge_mode_str2[10];
+    char charge_mode_str3[10];
+    char charge_mode_str4[10];
 
     switch ( mode )
     {
     case MODE_CHARGE:
-        {
-            if( m_charging )
-            {
-                sprintf(m_line1, "C:  %8s mAh", str_mAh);
-                if( m_buttons.Up())
-                {
-                    charge_stop();
-                    sprintf(m_line1, "C END %s mAh", str_mAh);
-                }
-            }
-            else
-            {
-                sprintf(m_line1, "%16s", "CHARGE");
-                if( m_buttons.Up())
-                {
-                    charge_start();
-                }
-            }
-            if( m_finished )
-            {
-                if( m_tickTock )
-                {
-                    sprintf(m_line2, "%6s  FINISHED", str_volt);
-                }
-                else
-                {
-                    sprintf(m_line2, "%6s %7d s", str_volt, m_chargerTime/1000);
-                }
-            }
-            else
-            {
-                sprintf(m_line2, "%6s %6s mA", str_volt, str_mA);
-            }
-        }
+        sprintf(charge_mode_str1, "C");
+        sprintf(charge_mode_str2, "C END");
+        sprintf(charge_mode_str3, "C-END");
+        sprintf(charge_mode_str4, "CHARGE");
         break;
-
     case MODE_DISCHARGE:
-        {
-            if( m_discharging )
-            {
-                sprintf(m_line1, "D:  %8s mAh", str_mAh);
-                if( m_buttons.Up())
-                {
-                    discharge_stop();
-                    sprintf(m_line1, "D END %s mAh", str_mAh);
-                }
-            }
-            else
-            {
-                sprintf(m_line1, "%16s", "DISCHARGE");
-                if( m_buttons.Up())
-                {
-                    discharge_start();
-                }
-            }
-        }
-        if( m_finished )
-        {
-            if( m_tickTock )
-            {
-                sprintf(m_line2, "%6s  FINISHED", str_volt);
-            }
-            else
-            {
-                sprintf(m_line2, "%6s %7d s", str_volt, m_chargerTime/1000);
-            }
-        }
-        else
-        {
-            sprintf(m_line2, "%6s %6s mA", str_volt, str_mA);
-        }
+        sprintf(charge_mode_str1, "D");
+        sprintf(charge_mode_str2, "D END");
+        sprintf(charge_mode_str3, "D-END");
+        sprintf(charge_mode_str4, "DISCHARGE");
         break;
     case MODE_CDC:
-        {
-            if(m_cdc_mode == 0)
-            {
-                //sprintf(m_line1, "%16s", "C --> D --> C");
-            }
-
-            if( m_cdc_mode == 1 )
-            {
-                sprintf(m_line1, "CDC %8s mAh", str_mAh);
-                if( m_buttons.Up())
-                {
-                    cdc_stop();
-                    sprintf(m_line1, "CDCE %s mAh", str_mAh);
-                }
-            }
-            else
-            {
-                sprintf(m_line1, "%16s", "C --> D --> C");
-                if( m_buttons.Up())
-                {
-                    cdc_start();
-                }
-            }
-            if( m_finished )
-                sprintf(m_line2, "%6s  FINISHED", str_volt);
-            else
-                sprintf(m_line2, "%6s %6s mA", str_volt, str_mA);
-        }
+        sprintf(charge_mode_str1, "CDC");
+        sprintf(charge_mode_str2, "CDC END");
+        sprintf(charge_mode_str3, "CDC-END");
+        sprintf(charge_mode_str4, "C->D->C");
         break;
     default:
         break;
+    }
+
+   if( m_working )
+   {
+        char spin = '-';
+        if( m_tickCounter == 1)
+            spin = 0x60; //'\\';
+        else if( m_tickCounter == 2)
+            spin = '|';
+        else if( m_tickCounter == 3)
+            spin = '/';
+
+        sprintf(m_line1, "%s: %c %7s mAh", charge_mode_str1, spin, str_mAh);
+        if( m_buttons.Up())
+        {
+            if( mode == MODE_CHARGE )
+            {
+                charge_stop();
+            }
+            else if( mode == MODE_DISCHARGE )
+            {
+                discharge_stop();
+            }
+            sprintf(m_line1, "%s %s mAh", charge_mode_str2, str_mAh);
+        }
+    }
+    else
+    {
+        if( m_finished &&
+            (int)m_mode == (int)mode )
+        {
+            sprintf(m_line1, "%s %s mAh", charge_mode_str3, str_mAh);
+        }
+        else
+        {
+            sprintf(m_line1, "%16s", charge_mode_str4 );
+        }
+        if( m_buttons.Up())
+        {
+            if( mode == MODE_CHARGE )
+            {
+                charge_start();
+            }
+            else if( mode == MODE_DISCHARGE )
+            {
+                discharge_start();
+            }
+        }
+    }
+    if( m_finished )
+    {
+        if( m_tickCounter == 0 )
+        {
+            sprintf(m_line2, "%6s  FINISHED", str_volt);
+        }
+        else if( m_tickCounter == 1)
+        {
+            sprintf(m_line2, "%6s %7d s", str_volt, m_workingTime/1000);
+        }
+        else
+        {
+            get_time_string(m_workingTime/1000, g_str_time);
+            sprintf(m_line2, "%6s %7s", str_volt, g_str_time);
+        }
+    }
+    else
+    {
+        sprintf(m_line2, "%6s %6s mA", str_volt, str_mA);
     }
 }
 
@@ -243,11 +240,8 @@ void Charger::setup_menu()
 void Charger::process( const bool tick )
 {
     //Serial.println("Charger::process");
+    m_tick = tick;
 
-    if( tick )
-    {
-        m_tickTock = 1 - m_tickTock; // tick/tock flipping each sec
-    }
     m_buttons.ReadButtons();
 
     if ( m_buttons.ButtonsChanged() )
@@ -255,6 +249,11 @@ void Charger::process( const bool tick )
         g_lcd_timer = 0;
         light = true;
         charger.main_menu();
+
+        if( m_buttons.Enter() && m_buttons.Esc() )
+        {
+            software_Reset();
+        }
     }
 
     if( !tick )
@@ -269,7 +268,7 @@ void Charger::process( const bool tick )
 
     g_diode = analogRead( 1 );
 
-    if( m_charging || m_discharging )
+    if( m_working )
     {
         if( g_tick)
         {
@@ -304,7 +303,7 @@ void Charger::process( const bool tick )
                 g_mAh += (current_mA * ((double)elapsedTime/1000.0)) / (60 * 60);
                 dtostrf(g_mAh, 6, 1, str_mAh);
                 m_lastMeassureTime = currentTime;
-                m_chargerTime += (elapsedTime/1000); // in seconds
+                m_workingTime += (elapsedTime/1000); // in seconds
 #ifdef VERBOSE
                 sprintf(buffer, " = %s mAh\n", str_mAh);
                 Serial.write(buffer);
@@ -358,22 +357,26 @@ void Charger::process( const bool tick )
 
     if( voltage < 3.0 )
     {
-        if( m_discharging )
+        if( m_working &&
+            m_mode == DISCHARGING)
         {
             m_finished = true;
-            m_chargerTime = millis() - m_chargerStart;
+            m_workingTime = millis() - m_chargerStart;
+            digitalWrite(3, HIGH);
+            m_working = false;
         }
-        digitalWrite(3, HIGH);
-        m_discharging = false;
     }
 
-    if( m_charging && g_diode < 800 && m_chargerTime > 30 )
+    if( m_working &&
+        g_diode < 800 &&
+        m_workingTime > 30 &&
+        m_mode == CHARGING)
     {
         Serial.print("charge STOP\n");
         m_finished = true;
-        m_charging = false;
+        m_working = false;
         digitalWrite(9, HIGH);
-        m_chargerTime = millis() - m_chargerStart;
+        m_workingTime = millis() - m_chargerStart;
     }
 
     if (
@@ -397,102 +400,91 @@ void Charger::process( const bool tick )
 
     if ( g_lcd_timer > g_lcd_timeout &&
          g_lcd_timeout > 0 &&
-         m_charging == false &&
-         m_discharging == false &&
+         m_working == false &&
+         m_working == false &&
          m_finished == false)
     {
         light = 0;
     }
 
-    if( m_buttons.Enter() && m_buttons.Esc() )
-    {
-        software_Reset();
-    }
-
     last_mode_button = mode_button;
     lastLight = light;
     //lastMode = (MODE_ENUM)mode;}
-
 }
 
 void Charger::setup()
 {
-    char value = EEPROM.read(eeprom_address+1);
+    char menu_value = EEPROM.read(eeprom_address+1);
 
-    if( value < NUM_MODE_ENUMS)
+    if( menu_value < NUM_MODE_ENUMS)
     {
-        m_menu = (MODE_ENUM)value;
+        m_menu = (MODE_ENUM)menu_value;
     }
 }
 
 void Charger::charge_start()
 {
-    discharge_stop();
-    cdc_stop();
+    all_stop();
     digitalWrite(9, LOW);
     m_finished = false;
-    m_charging = true;
-    m_discharging = false;
+    m_working = true;
     g_mAh = 0;
-    m_chargerTime = 0;
+    m_workingTime = 0;
+    m_mode = CHARGING;
     m_chargerStart = millis();
 }
 
 void Charger::charge_stop()
 {
     digitalWrite(9, HIGH);
-    m_charging = false;
+    m_working = false;
     m_finished = true;
-    m_chargerTime = millis() - m_chargerStart;
+    m_workingTime = millis() - m_chargerStart;
 }
 
 void Charger::discharge_start()
 {
-    charge_stop();
-    cdc_stop();
+    all_stop();
     digitalWrite(3, LOW);
     m_finished = false;
-    m_charging = false;
-    m_discharging = true;
+    m_working = true;
     g_mAh = 0;
-    m_chargerTime = 0;
+    m_workingTime = 0;
+    m_mode = DISCHARGING;
     m_chargerStart = millis();
 }
 
 void Charger::discharge_stop()
 {
     digitalWrite(3, HIGH);
-    m_discharging = false;
+    m_working = false;
     m_finished = true;
-    m_chargerTime = millis() - m_chargerStart;
+    m_workingTime = millis() - m_chargerStart;
 }
 
 void Charger::cdc_start()
 {
-    charge_stop();
-    discharge_stop();
-
+    all_stop();
     m_cdc_mode = 1;
     digitalWrite(9, LOW);
     digitalWrite(3, HIGH);
-    m_discharging = false;
-    m_charging = false;
+    m_working = true;
     m_finished = false;
     m_cdc_mode = 1; // 1st charge
     g_mAh = 0;
+    m_mode = CDC;
     m_chargerStart = millis();
-    m_chargerTime = 0;
+    m_workingTime = 0;
 }
 
 void Charger::cdc_stop()
 {
     digitalWrite(3, HIGH);
     digitalWrite(9, HIGH);
-    m_discharging = false;
-    m_charging = false;
+    m_working = false;
     m_finished = true;
     m_cdc_mode = 0;
-    m_chargerTime = millis() - m_chargerStart;
+    m_workingTime = millis() - m_chargerStart;
 }
 
 void Charger::all_stop()
