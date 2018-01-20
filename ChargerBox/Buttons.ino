@@ -31,6 +31,39 @@ bool CButtons::ButtonsChanged()
         m_currentState.bottom_button != m_lastState.bottom_button ||
         m_currentState.enter_button != m_lastState.enter_button )
     {
+        if(m_currentState.mode_button)
+        {
+            Serial.println("Esc");
+        }
+        if(m_currentState.left_button)
+        {
+            Serial.println("Left");
+        }
+        if(m_currentState.up_button)
+        {
+            Serial.println("Up");
+        }
+        if(m_currentState.right_button)
+        {
+            Serial.println("Right");
+        }
+        if(m_currentState.bottom_button)
+        {
+            Serial.println("Down");
+        }
+        if(m_currentState.enter_button)
+        {
+            Serial.println("Enter");
+        }
+
+        if( m_currentState.bottom_button &&
+            m_currentState.mode_button )
+        {
+            Serial.println("HALT!");
+            delay(1000);
+            software_Reset();
+        }
+
         return true;
     }
     return false;

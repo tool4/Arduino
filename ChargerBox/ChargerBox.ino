@@ -22,19 +22,14 @@ LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 unsigned long g_lastSeconds = 0;
 unsigned long g_lastMillis = 0;
-unsigned long g_elapsedMillis = 0;
 unsigned int g_elapsedSeconds = 0;
-unsigned int g_totalSeconds = 0;
-unsigned int g_seconds = 0;
-unsigned int g_minutes = 0;
-unsigned int g_hours = 0;
 unsigned int g_lcd_timer = 0;
 unsigned int g_lcd_timeout = 20;
 double g_mAh = 0;
-bool g_tick = false;
 
 unsigned long getTime()
 {
+    bool tick = false;
     unsigned long Millis = millis();
     if ( Millis < g_lastMillis ) // overflow!
     {
@@ -44,31 +39,15 @@ unsigned long getTime()
 
     g_elapsedSeconds = ( currentSeconds - g_lastSeconds );
 
-    g_elapsedMillis = Millis - g_lastMillis;
     g_lastMillis = Millis;
     if ( g_elapsedSeconds > 0 )
     {
-        g_seconds += g_elapsedSeconds;
-        g_totalSeconds += g_elapsedSeconds;
         g_lastSeconds = currentSeconds;
         g_lcd_timer += g_elapsedSeconds;
-        g_tick = true;
+        tick = true;
     }
-    if ( g_seconds >= 60 )
-    {
-        ++g_minutes;
-        g_seconds = 0;
-    }
-    if ( g_minutes >= 60 )
-    {
-        ++g_hours;
-        g_minutes = 0;
-    }
-    //char buf[64];
-    //sprintf(buf, "elapsed: %d:%d:%d secs: %u c secs: %u\n",
-    //    g_hours, g_minutes, g_seconds, currentSeconds, millis()/1000);
-    //Serial.print(buf);
-    return g_elapsedMillis;
+
+    return tick;
 }
 
 long readVcc()
@@ -170,15 +149,8 @@ void setup()
 
 void loop()
 {
-    //Serial.println("loop");
-
-    getTime();
-
-    charger.process(g_tick);
-
+    bool tick = getTime();
+    charger.process(tick);
     lcd.setBacklight( light ? HIGH : LOW );
-    g_tick = false;
-    //Serial.println("loop end");
-
 }
 

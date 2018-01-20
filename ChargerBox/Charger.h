@@ -13,10 +13,9 @@ int  current_mA = 0;
 char str_vcc[6];
 char str_volt[6];
 char str_mA[5];
-char str_mAh[7];
+char str_mAh[6];
 char serial_buf1[20];
 char serial_buf2[20];
-char buffer[120];
 int serial_buf_line_no = 1;
 char g_str_time[10];
 
@@ -66,7 +65,6 @@ enum SETUP_ENUM
     MODE_SERIAL_MON, // hidden mode
 };
 
-
 class Charger
 {
 public:
@@ -80,6 +78,13 @@ public:
         m_chargerStart = 0;
         m_lastMeassureTime = 0;
         m_workingTime = 0;
+        m_finished = 0;
+        m_working = false;
+        m_tick = false;
+        m_tickCounter = 0;
+        m_cdc_values[0] = 0.0f;
+        m_cdc_values[1] = 0.0f;
+        m_cdc_values[2] = 0.0f;
 
         sprintf( m_line1, "                       ");
         sprintf( m_line1, "                       ");
@@ -105,18 +110,19 @@ private:
     MODE_ENUM m_menu;
     SETUP_ENUM m_setup_mode;
     CHARGER_ENUM m_charger_mode;
-    WORKING_MODE m_mode = NONE;
+    WORKING_MODE m_mode;
     CButtons m_buttons;
     int m_cdc_mode;
     char m_line1[24];
     char m_line2[24];
-    bool m_tick = false;
-    int m_tickCounter = 0;
+    bool m_tick;
+    int m_tickCounter;
+    float m_cdc_values[3];
 
-    unsigned long m_chargerStart = 0;
-    unsigned long m_lastMeassureTime = 0;
-    unsigned long m_workingTime = 0;
-    bool m_finished = 0;
-    bool m_working = false;
+    unsigned long m_chargerStart;
+    unsigned long m_lastMeassureTime;
+    unsigned long  m_workingTime;
+    bool m_finished;
+    bool m_working;
 };
 
